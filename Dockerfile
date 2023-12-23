@@ -4,6 +4,8 @@ COPY . /src
 
 WORKDIR /src
 
+RUN npm install
+
 RUN npm install -g /src
 
 ENTRYPOINT ["sonar-report"]
