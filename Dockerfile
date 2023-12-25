@@ -1,12 +1,14 @@
 FROM node:18-alpine3.19
 
-COPY . /src
+COPY . /sonar-report
 
-WORKDIR /src
+WORKDIR /sonar-report
 
 RUN npm install
 
-RUN npm install -g /src
+RUN npm install -g /sonar-report
+
+WORKDIR /src
 
 ENTRYPOINT ["sonar-report"]
 
