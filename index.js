@@ -96,6 +96,11 @@ const buildCommand = (command = new Command()) =>
       true
     )
     .option(
+      "--only-detected-rules",
+      "Set this flag to include only detected rules in the report. Not useful if no-rules-in-report=true.",
+      false
+    )
+    .option(
       "--vulnerability-phrase <phrase>",
       "Set to override 'Vulnerability' phrase in the report.",
       "Vulnerability"
@@ -205,6 +210,7 @@ const generateReport = async (options) => {
     fixMissingRule: options.fixMissingRule,
     noSecurityHotspot: !options.securityHotspot,
     noRulesInReport: !options.rulesInReport,
+    onlyDetectedRules: options.onlyDetectedRules,
     vulnerabilityPhrase: options.vulnerabilityPhrase,
     noCoverage: !options.coverage,
     vulnerabilityPluralPhrase: options.vulnerabilityPluralPhrase,
@@ -523,7 +529,7 @@ const generateReport = async (options) => {
       do {
         try {
           const response = await got(
-            `${sonarBaseURL}/api/hotspots/search?projectKey=${sonarComponent}${filterHotspots}${newCodePeriodFilter}${withOrganization}&ps=${pageSize}&p=${page}&statuses=${HOTSPOT_STATUSES}`,
+            `${sonarBaseURL}/api/hotspots/search?projectKey=${sonarComponent}${filterHotspots}${newCodePeriodFilter}${withOrganization}&ps=${pageSize}&p=${page}&status=${HOTSPOT_STATUSES}`,
             {
               agent,
               headers,
@@ -535,7 +541,7 @@ const generateReport = async (options) => {
           data.hotspotKeys.push(...json.hotspots.map((hotspot) => hotspot.key));
         } catch (error) {
           console.error(
-            `${sonarBaseURL}/api/hotspots/search?projectKey=${sonarComponent}${filterHotspots}${newCodePeriodFilter}${withOrganization}&ps=${pageSize}&p=${page}&statuses=${HOTSPOT_STATUSES}`
+            `${sonarBaseURL}/api/hotspots/search?projectKey=${sonarComponent}${filterHotspots}${newCodePeriodFilter}${withOrganization}&ps=${pageSize}&p=${page}&status=${HOTSPOT_STATUSES}`
           );
           logError("getting hotspots list", error);
           return null;
@@ -594,10 +600,32 @@ const generateReport = async (options) => {
     };
   }
 
+  // Iterate over all rules and remove those that have no issues
+  if (!data.noRulesInReport && data.onlyDetectedRules) {
+    for (let [key, value] of data.rules) {
+      if (!data.issues.some((issue) => issue.rule === key)) {
+        data.rules.delete(key);
+      }
+    }
+  }
+
   console.error(await ejs.renderFile(__dirname + "/summary.txt.ejs", data, {}));
 
   if (options.saveReportJson) {
-    await fs.writeFile(options.saveReportJson, JSON.stringify(data, null, 2));
+    const replacer = (key, value) => {
+      // JSON.stringify() not convert ES6 Map() to value, this replacer will apply for rules to add rules to json response.
+      // https://stackoverflow.com/questions/29085197/how-do-you-json-stringify-an-es6-map
+      if (key === "rules") {
+        return Array.from(value).reduce((obj, [key, value]) => {
+            obj[key] = value;
+            return obj;
+            }, {});
+      } else {
+        return value
+      }
+    }
+
+    await fs.writeFile(options.saveReportJson, JSON.stringify(data, replacer, 2));
   }
 
   if (options.ejsFile) {
