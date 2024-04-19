@@ -135,6 +135,21 @@ const buildCommand = (command = new Command()) =>
       "Output report file path. (default: report.html)",
       "report.html"
     )
+    .option(
+        "--wait-for-task-id",
+        "Wait for background task complete before pull issue",
+        false
+    )
+    .option(
+        "--wait-task-interval",
+        "Time interval pull task status in seconds",
+        30
+    )
+    .option(
+        "--wait-task-try-times",
+        "How many time maximum try to get status",
+        20
+    )
     .option("--exit-code", "Exit with non zero if issues were found")
     .addHelpText(
       "after",
@@ -223,6 +238,9 @@ const generateReport = async (options) => {
     rules: new Map(),
     issues: [],
     hotspotKeys: [],
+    waitForTaskId: options.waitForTaskId,
+    waitTaskInterval: options.waitTaskInterval,
+    waitTaskTryTimes: options.waitTaskTryTimes,
   };
 
   const newCodePeriodFilter = data.inNewCodePeriod
@@ -354,6 +372,28 @@ const generateReport = async (options) => {
     // Basic authentication with user token
     headers["Authorization"] =
       "Basic " + Buffer.from(token + ":").toString("base64");
+  }
+
+  const rejectStatus = ["SUCCESS", "FAILED"]
+  if (data.waitForTaskId) {
+    for (let time = 0; time < data.waitTaskTryTimes; time++) {
+      console.log(`Check task at ${time} time(s)`)
+
+      const response = await got(
+          `${sonarBaseURL}/api/ce/task?id=${data.waitForTaskId}`,
+          {
+            agent,
+            headers
+          }
+      )
+
+      const json = JSON.parse(response.body)
+
+      if (json.task && json.task.status && rejectStatus.includes(json.task.status.toUpperCase())) {
+        console.log(`Check task done at ${time} time(s) with status ${json.task.status}`)
+        break
+      }
+    }
   }
 
   if (data.inNewCodePeriod) {
