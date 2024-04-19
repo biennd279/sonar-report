@@ -376,7 +376,10 @@ const generateReport = async (options) => {
 
   const rejectStatus = ["SUCCESS", "FAILED"]
   if (data.waitForTaskId) {
-    for (let time = 0; time < data.waitTaskTryTimes; time++) {
+    let time = 0
+
+    const intervalId = setInterval(async () => {
+      time++
       console.log(`Check task at ${time} time(s)`)
 
       const response = await got(
@@ -391,9 +394,14 @@ const generateReport = async (options) => {
 
       if (json.task && json.task.status && rejectStatus.includes(json.task.status.toUpperCase())) {
         console.log(`Check task done at ${time} time(s) with status ${json.task.status}`)
-        break
+        clearInterval(intervalId)
       }
-    }
+
+      if (time >= data.waitTaskTryTimes) {
+        clearInterval(intervalId)
+      }
+
+    }, data.waitTaskInterval * 1000)
   }
 
   if (data.inNewCodePeriod) {
